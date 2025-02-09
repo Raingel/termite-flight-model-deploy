@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Termite Flight Risk Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #map {
+      height: 90%;
+    }
+    #controls {
+      height: 10%;
+      background: #f1f1f1;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 5px;
+    }
+    #dateDisplay {
+      font-weight: bold;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="controls">
+    <div>
+      <label><input type="checkbox" id="cfCheckbox" checked> CF Risk</label>
+      <label><input type="checkbox" id="cgCheckbox" checked> CG Risk</label>
+    </div>
+    <div>
+      <input type="range" id="dateSlider" min="0" max="0" value="0">
+      <span id="dateDisplay"></span>
+    </div>
+  </div>
+
+  <!-- 引入 jQuery 與 Leaflet -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    // --- 地圖與全域變數 ---
+    const map = L.map('map').setView([23.5, 121.0], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18
+    }).addTo(map);
+
+    // 用於儲存成功載入的預報資料，日期字串對應資料陣列
+    let forecastDataByDate = {};
+    // 存放可用的日期陣列
+    let availableDates = [];
+    // 兩個圖層：cf 與 cg
+    const cfLayer = L.layerGroup();
+    const cgLayer = L.layerGroup();
+
+    // --- 色階函式 ---
+    function getCFColor(risk) {
+      if (risk <= 0.5) return 'rgba(128,128,128,0.5)';
+      let t = (risk - 0.5) / 0.5;  // t: 0~1
+      let r = Math.round(128 * (1-t) + 0 * t);
+      let g = Math.round(128 * (1-t) + 0 * t);
+      let b = Math.round(128 * (1-t) + 139 * t);
+      return `rgba(${r},${g},${b},0.6)`;
+    }
+    function getCGColor(risk) {
+      if (risk <= 0.5) return 'rgba(128,128,128,0.5)';
+      let t = (risk - 0.5) / 0.5;
+      let r = Math.round(128 * (1-t) + 139 * t);
+      let g = Math.round(128 * (1-t) + 0 * t);
+      let b = Math.round(128 * (1-t) + 0 * t);
+      return `rgba(${r},${g},${b},0.6)`;
+    }
+
+    // --- 產生網格多邊形 (每個網格大小 0.25°) ---
+    function createCellPolygon(lon, lat) {
+      const half = 0.125;
+      return [
+        [lat - half, lon - half],
+        [lat - half, lon + half],
+        [lat + half, lon + half],
+        [lat + half, lon - half]
+      ];
+    }
+
+    // --- 載入單一日期的預報 JSON --- 
+    // 預報資料 URL 格式：  
+    // "https://raw.githubusercontent.com/Raingel/termite-flight-model-deploy/refs/heads/main/2_predictions/YYYY-MM-DD.json"
+    function loadForecast(dateStr) {
+      const url = `https://raw.githubusercontent.com/Raingel/termite-flight-model-deploy/refs/heads/main/2_predictions/${dateStr}.json`;
+      return $.getJSON(url);
+    }
+
+    // --- 初始化：嘗試載入從今天往前 60 天到往後 16 天的預報資料 ---
+    async function initForecastData() {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 60);
+      const end = new Date(today);
+      end.setDate(end.getDate() + 16);
+      let current = new Date(start);
+      const loadPromises = [];
+      while (current <= end) {
+        const ds = current.toISOString().split('T')[0];
+        loadPromises.push(
+          loadForecast(ds)
+            .then(data => {
+              forecastDataByDate[ds] = data;
+              availableDates.push(ds);
+            })
+            .catch(err => {
+              console.warn(`無法載入 ${ds} 的預報資料。`);
+            })
+        );
+        current.setDate(current.getDate() + 1);
+      }
+      await Promise.all(loadPromises);
+      availableDates.sort();
+      // 設定 slider 的範圍
+      $('#dateSlider').attr('min', 0);
+      $('#dateSlider').attr('max', availableDates.length - 1);
+      // 預設顯示今天，如果有
+      let todayStr = today.toISOString().split('T')[0];
+      let defaultIdx = availableDates.indexOf(todayStr);
+      if (defaultIdx === -1) defaultIdx = 0;
+      $('#dateSlider').val(defaultIdx);
+      updateDateDisplay();
+      updateLayers();
+    }
+
+    function updateDateDisplay() {
+      const idx = parseInt($('#dateSlider').val());
+      const ds = availableDates[idx];
+      $('#dateDisplay').text(ds);
+    }
+
+    // --- 更新圖層：根據當前選擇日期，依預報資料產生風險圖層 ---
+    function updateLayers() {
+      const idx = parseInt($('#dateSlider').val());
+      const ds = availableDates[idx];
+      cfLayer.clearLayers();
+      cgLayer.clearLayers();
+      if (!forecastDataByDate[ds]) return;
+      const data = forecastDataByDate[ds];
+      data.forEach(record => {
+        // 讀取每個網格點的經緯度與 ensemble 風險值
+        const lon = record.features.longitude;
+        const lat = record.features.latitude;
+        const cfRisk = record.ensemble.cf;
+        const cgRisk = record.ensemble.cg;
+        const bounds = createCellPolygon(lon, lat);
+        // 建立 cf 圖層多邊形
+        const polyCF = L.polygon(bounds, {
+          color: getCFColor(cfRisk),
+          fillColor: getCFColor(cfRisk),
+          fillOpacity: 0.6,
+          weight: 1,
+          interactive: false
+        });
+        // 建立 cg 圖層多邊形
+        const polyCG = L.polygon(bounds, {
+          color: getCGColor(cgRisk),
+          fillColor: getCGColor(cgRisk),
+          fillOpacity: 0.6,
+          weight: 1,
+          interactive: false
+        });
+        cfLayer.addLayer(polyCF);
+        cgLayer.addLayer(polyCG);
+      });
+      // 根據 checkbox 狀態加入或移除圖層
+      if ($('#cfCheckbox').is(':checked')) {
+        map.addLayer(cfLayer);
+      } else {
+        map.removeLayer(cfLayer);
+      }
+      if ($('#cgCheckbox').is(':checked')) {
+        map.addLayer(cgLayer);
+      } else {
+        map.removeLayer(cgLayer);
+      }
+    }
+
+    // --- 當網頁載入完成後初始化 ---
+    $(document).ready(function() {
+      // 地圖中心設為台灣
+      map.setView([23.5, 121.0], 7);
+      initForecastData();
+      $('#dateSlider').on('input change', function() {
+        updateDateDisplay();
+        updateLayers();
+      });
+      $('#cfCheckbox, #cgCheckbox').on('change', function() {
+        updateLayers();
+      });
+    });
+  </script>
+</body>
+</html>
