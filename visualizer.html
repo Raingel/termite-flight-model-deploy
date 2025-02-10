@@ -56,26 +56,28 @@
     let forecastDataByDate = {};
     // 存放可用的日期陣列
     let availableDates = [];
-    // 兩個圖層：cf 與 cg
+    // 兩個風險圖層：cf 與 cg
     const cfLayer = L.layerGroup();
     const cgLayer = L.layerGroup();
+    // 新增一個點擊用的圖層 (clickLayer)，用來綁定 popup 點擊事件
+    const clickLayer = L.layerGroup();
 
     // --- 色階函式 ---
     function getCFColor(risk) {
-      if (risk <= 0.5) return 'rgba(128,128,128,0.5)';
-      let t = (risk - 0.5) / 0.5;  // t: 0~1
-      let r = Math.round(128 * (1-t) + 0 * t);
-      let g = Math.round(128 * (1-t) + 0 * t);
-      let b = Math.round(128 * (1-t) + 139 * t);
-      return `rgba(${r},${g},${b},0.6)`;
+      if (risk <= 0.5) return 'rgba(128,128,128,0.8)';
+      let t = (risk - 0.5) / 0.5;  // t 從 0 到 1
+      let r = Math.round(128 * (1 - t) + 0 * t);
+      let g = Math.round(128 * (1 - t) + 0 * t);
+      let b = Math.round(128 * (1 - t) + 180 * t);
+      return `rgba(${r},${g},${b},0.8)`;
     }
     function getCGColor(risk) {
-      if (risk <= 0.5) return 'rgba(128,128,128,0.5)';
+      if (risk <= 0.5) return 'rgba(128,128,128,0.8)';
       let t = (risk - 0.5) / 0.5;
-      let r = Math.round(128 * (1-t) + 139 * t);
-      let g = Math.round(128 * (1-t) + 0 * t);
-      let b = Math.round(128 * (1-t) + 0 * t);
-      return `rgba(${r},${g},${b},0.6)`;
+      let r = Math.round(128 * (1 - t) + 180 * t);
+      let g = Math.round(128 * (1 - t) + 0 * t);
+      let b = Math.round(128 * (1 - t) + 0 * t);
+      return `rgba(${r},${g},${b},0.8)`;
     }
 
     // --- 產生網格多邊形 (每個網格大小 0.25°) ---
@@ -90,18 +92,17 @@
     }
 
     // --- 載入單一日期的預報 JSON --- 
-    // 預報資料 URL 格式：  
-    // "https://raw.githubusercontent.com/Raingel/termite-flight-model-deploy/refs/heads/main/2_predictions/YYYY-MM-DD.json"
+    // URL 格式： "https://raw.githubusercontent.com/Raingel/termite-flight-model-deploy/refs/heads/main/2_predictions/YYYY-MM-DD.json"
     function loadForecast(dateStr) {
       const url = `https://raw.githubusercontent.com/Raingel/termite-flight-model-deploy/refs/heads/main/2_predictions/${dateStr}.json`;
       return $.getJSON(url);
     }
 
-    // --- 初始化：嘗試載入從今天往前 60 天到往後 16 天的預報資料 ---
+    // --- 初始化：載入從今天往前 365 天到往後 16 天的預報資料 ---
     async function initForecastData() {
       const today = new Date();
       const start = new Date(today);
-      start.setDate(start.getDate() - 60);
+      start.setDate(start.getDate() - 365);
       const end = new Date(today);
       end.setDate(end.getDate() + 16);
       let current = new Date(start);
@@ -125,7 +126,6 @@
       // 設定 slider 的範圍
       $('#dateSlider').attr('min', 0);
       $('#dateSlider').attr('max', availableDates.length - 1);
-      // 預設顯示今天，如果有
       let todayStr = today.toISOString().split('T')[0];
       let defaultIdx = availableDates.indexOf(todayStr);
       if (defaultIdx === -1) defaultIdx = 0;
@@ -140,12 +140,13 @@
       $('#dateDisplay').text(ds);
     }
 
-    // --- 更新圖層：根據當前選擇日期，依預報資料產生風險圖層 ---
+    // --- 更新圖層：根據選擇日期產生風險圖層與點擊用圖層 ---
     function updateLayers() {
       const idx = parseInt($('#dateSlider').val());
       const ds = availableDates[idx];
       cfLayer.clearLayers();
       cgLayer.clearLayers();
+      clickLayer.clearLayers();
       if (!forecastDataByDate[ds]) return;
       const data = forecastDataByDate[ds];
       data.forEach(record => {
@@ -155,24 +156,42 @@
         const cfRisk = record.ensemble.cf;
         const cgRisk = record.ensemble.cg;
         const bounds = createCellPolygon(lon, lat);
-        // 建立 cf 圖層多邊形
+        // 建立 cf 風險圖層多邊形
         const polyCF = L.polygon(bounds, {
           color: getCFColor(cfRisk),
           fillColor: getCFColor(cfRisk),
-          fillOpacity: 0.6,
+          fillOpacity: 0.8,
           weight: 1,
           interactive: false
         });
-        // 建立 cg 圖層多邊形
+        // 建立 cg 風險圖層多邊形
         const polyCG = L.polygon(bounds, {
           color: getCGColor(cgRisk),
           fillColor: getCGColor(cgRisk),
-          fillOpacity: 0.6,
+          fillOpacity: 0.8,
           weight: 1,
           interactive: false
         });
         cfLayer.addLayer(polyCF);
         cgLayer.addLayer(polyCG);
+        // 建立一個透明的多邊形作為點擊層，點擊後彈出 popup 顯示風險值
+        const clickPoly = L.polygon(bounds, {
+          color: 'transparent',
+          fillOpacity: 0,
+          interactive: true
+        });
+        clickPoly.on('click', function(e) {
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`<div>
+                          <b>Date:</b> ${ds}<br>
+                          <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
+                          <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
+                          <b>CG Risk:</b> ${cgRisk.toFixed(2)}
+                         </div>`)
+            .openOn(map);
+        });
+        clickLayer.addLayer(clickPoly);
       });
       // 根據 checkbox 狀態加入或移除圖層
       if ($('#cfCheckbox').is(':checked')) {
@@ -185,6 +204,8 @@
       } else {
         map.removeLayer(cgLayer);
       }
+      // 點擊圖層始終加入
+      map.addLayer(clickLayer);
     }
 
     // --- 當網頁載入完成後初始化 ---
