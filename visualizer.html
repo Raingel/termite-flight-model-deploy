@@ -82,7 +82,7 @@
 
     // --- 產生網格多邊形 (每個網格大小 0.25°) ---
     function createCellPolygon(lon, lat) {
-      const half = 0.125;
+      const half = 0.05;
       return [
         [lat - half, lon - half],
         [lat - half, lon + half],
