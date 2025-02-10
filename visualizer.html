@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     html, body {
       height: 100%;
@@ -59,28 +61,29 @@
     // 兩個風險圖層：cf 與 cg
     const cfLayer = L.layerGroup();
     const cgLayer = L.layerGroup();
-    // 新增一個點擊用的圖層 (clickLayer)，用來綁定 popup 點擊事件
+    // 點擊用圖層，用來綁定 popup 點擊事件
     const clickLayer = L.layerGroup();
 
     // --- 色階函式 ---
     function getCFColor(risk) {
-      if (risk <= 0.5) return 'rgba(128,128,128,0.8)';
+      if (risk <= 0.5) return 'rgba(128,128,128,0.6)';
       let t = (risk - 0.5) / 0.5;  // t 從 0 到 1
       let r = Math.round(128 * (1 - t) + 0 * t);
       let g = Math.round(128 * (1 - t) + 0 * t);
       let b = Math.round(128 * (1 - t) + 180 * t);
-      return `rgba(${r},${g},${b},0.8)`;
+      return `rgba(${r},${g},${b},0.6)`;
     }
     function getCGColor(risk) {
-      if (risk <= 0.5) return 'rgba(128,128,128,0.8)';
+      if (risk <= 0.5) return 'rgba(128,128,128,0.4)';
       let t = (risk - 0.5) / 0.5;
       let r = Math.round(128 * (1 - t) + 180 * t);
       let g = Math.round(128 * (1 - t) + 0 * t);
       let b = Math.round(128 * (1 - t) + 0 * t);
-      return `rgba(${r},${g},${b},0.8)`;
+      return `rgba(${r},${g},${b},0.6)`;
     }
 
     // --- 產生網格多邊形 (每個網格大小 0.25°) ---
+    // 注意：這裡網格大小設定為 0.1° (每邊 0.1°) 只是範例，請依實際需求調整。
     function createCellPolygon(lon, lat) {
       const half = 0.05;
       return [
@@ -123,7 +126,7 @@
       }
       await Promise.all(loadPromises);
       availableDates.sort();
-      // 設定 slider 的範圍
+      // 設定 slider 範圍
       $('#dateSlider').attr('min', 0);
       $('#dateSlider').attr('max', availableDates.length - 1);
       let todayStr = today.toISOString().split('T')[0];
@@ -140,6 +143,71 @@
       $('#dateDisplay').text(ds);
     }
 
+    // --- 收集指定網格點在整個日期區間的風險資料 ---
+    function getRiskTimeSeries(lat, lon) {
+      let labels = [];
+      let cfRisks = [];
+      let cgRisks = [];
+      availableDates.forEach(dateStr => {
+        let records = forecastDataByDate[dateStr];
+        if (records) {
+          // 以精確比對經緯度（假設數值完全相同）
+          let rec = records.find(r => r.features.latitude === lat && r.features.longitude === lon);
+          if (rec) {
+            labels.push(dateStr);
+            cfRisks.push(rec.ensemble.cf);
+            cgRisks.push(rec.ensemble.cg);
+          }
+        }
+      });
+      return { labels, cfRisks, cgRisks };
+    }
+
+    // --- 利用 Chart.js 畫圖，顯示該網格的風險變化 ---
+    function drawRiskChart(lat, lon, chartId) {
+      const riskData = getRiskTimeSeries(lat, lon);
+      if (riskData.labels.length === 0) {
+        console.warn("找不到該網格的風險資料");
+        return;
+      }
+      const ctx = document.getElementById(chartId).getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: riskData.labels,
+          datasets: [
+            {
+              label: 'CF Risk',
+              data: riskData.cfRisks,
+              borderColor: 'rgba(0,0,180,0.8)',
+              backgroundColor: 'rgba(0,0,180,0.2)',
+              fill: false,
+            },
+            {
+              label: 'CG Risk',
+              data: riskData.cgRisks,
+              borderColor: 'rgba(180,0,0,0.8)',
+              backgroundColor: 'rgba(180,0,0,0.2)',
+              fill: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          title: { display: true, text: 'Risk Variation Over Time' },
+          scales: {
+            x: {
+              ticks: { autoSkip: true, maxTicksLimit: 10 }
+            },
+            y: {
+              beginAtZero: true,
+              suggestedMax: 1
+            }
+          }
+        }
+      });
+    }
+
     // --- 更新圖層：根據選擇日期產生風險圖層與點擊用圖層 ---
     function updateLayers() {
       const idx = parseInt($('#dateSlider').val());
@@ -150,13 +218,11 @@
       if (!forecastDataByDate[ds]) return;
       const data = forecastDataByDate[ds];
       data.forEach(record => {
-        // 讀取每個網格點的經緯度與 ensemble 風險值
         const lon = record.features.longitude;
         const lat = record.features.latitude;
         const cfRisk = record.ensemble.cf;
         const cgRisk = record.ensemble.cg;
         const bounds = createCellPolygon(lon, lat);
-        // 建立 cf 風險圖層多邊形
         const polyCF = L.polygon(bounds, {
           color: getCFColor(cfRisk),
           fillColor: getCFColor(cfRisk),
@@ -164,7 +230,6 @@
           weight: 1,
           interactive: false
         });
-        // 建立 cg 風險圖層多邊形
         const polyCG = L.polygon(bounds, {
           color: getCGColor(cgRisk),
           fillColor: getCGColor(cgRisk),
@@ -174,26 +239,31 @@
         });
         cfLayer.addLayer(polyCF);
         cgLayer.addLayer(polyCG);
-        // 建立一個透明的多邊形作為點擊層，點擊後彈出 popup 顯示風險值
+        // 建立一個透明多邊形作為點擊層，點擊後彈出 popup 並顯示風險圖表
         const clickPoly = L.polygon(bounds, {
           color: 'transparent',
           fillOpacity: 0,
           interactive: true
         });
         clickPoly.on('click', function(e) {
+          // 產生一個唯一的 canvas id，方便在 popup 中使用 Chart.js
+          let chartId = `chart_${lat}_${lon}`;
+          let popupContent = `<div>
+                                <b>Date:</b> ${ds}<br>
+                                <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
+                                <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
+                                <b>CG Risk:</b> ${cgRisk.toFixed(2)}<br>
+                                <canvas id="${chartId}" width="300" height="200"></canvas>
+                              </div>`;
           L.popup()
             .setLatLng(e.latlng)
-            .setContent(`<div>
-                          <b>Date:</b> ${ds}<br>
-                          <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
-                          <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
-                          <b>CG Risk:</b> ${cgRisk.toFixed(2)}
-                         </div>`)
+            .setContent(popupContent)
             .openOn(map);
+          // 略微延遲後繪製圖表，確保 popup 已完成渲染
+          setTimeout(function() { drawRiskChart(lat, lon, chartId); }, 150);
         });
         clickLayer.addLayer(clickPoly);
       });
-      // 根據 checkbox 狀態加入或移除圖層
       if ($('#cfCheckbox').is(':checked')) {
         map.addLayer(cfLayer);
       } else {
@@ -204,13 +274,11 @@
       } else {
         map.removeLayer(cgLayer);
       }
-      // 點擊圖層始終加入
       map.addLayer(clickLayer);
     }
 
     // --- 當網頁載入完成後初始化 ---
     $(document).ready(function() {
-      // 地圖中心設為台灣
       map.setView([23.5, 121.0], 7);
       initForecastData();
       $('#dateSlider').on('input change', function() {
