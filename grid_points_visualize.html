@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>互動式經緯度標記地圖</title>
+  <!-- 引入 Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+    /* 上方區塊：textarea 與按鈕 */
+    #input-container {
+      padding: 10px;
+      background: #f0f0f0;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+    /* 地圖區塊：高度調大 */
+    #map {
+      width: 100%;
+      height: 700px;
+    }
+  </style>
+</head>
+<body>
+  <div id="input-container">
+    <textarea id="dataInput" placeholder="請貼上資料，例如：
+lon,lat
+119.25,21.5
+119.25,21.75
+119.25,22
+..."></textarea>
+    <br>
+    <button id="plotBtn">標記經緯度點</button>
+  </div>
+  
+  <div id="map"></div>
+
+  <!-- 引入 Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // 初始化地圖，預設中心點設在 (21.5, 119.25)，縮放等級 8
+    var map = L.map('map').setView([21.5, 119.25], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // 建立一個 marker 的 layer group（方便後續管理與清除）
+    var markerLayer = L.layerGroup().addTo(map);
+
+    // 解析 textarea 資料並標記所有經緯度點
+    function plotMarkers() {
+      // 先清除現有 marker
+      markerLayer.clearLayers();
+
+      var data = document.getElementById('dataInput').value.trim();
+      if (!data) {
+        alert("請先輸入資料！");
+        return;
+      }
+      var lines = data.split('\n');
+
+      // 如果第一行是 header（例如 "lon,lat"），則移除，供 marker 解析時不使用
+      if (lines.length && lines[0].toLowerCase().includes('lon') && lines[0].toLowerCase().includes('lat')) {
+        lines.shift();
+      }
+
+      // 儲存所有 marker 以便後續調整地圖視野
+      var markers = [];
+
+      lines.forEach(function(line) {
+        line = line.trim();
+        if (!line) return;
+        var parts = line.split(',');
+        if (parts.length < 2) return;
+        var lon = parseFloat(parts[0].trim());
+        var lat = parseFloat(parts[1].trim());
+        if (isNaN(lon) || isNaN(lat)) return;
+
+        // Leaflet 的 Marker 須用 [緯度, 經度] 順序
+        var marker = L.marker([lat, lon]);
+
+        // 將原始的資料行內容存到 marker 的屬性上
+        marker.lineContent = line;
+
+        // 加入點選事件：點選後移除 marker 並從 textarea 刪除該筆資料
+        marker.on('click', function() {
+          // 從圖層中移除該 marker
+          markerLayer.removeLayer(marker);
+
+          // 取得目前 textarea 內容，分解為行
+          var textarea = document.getElementById('dataInput');
+          var allLines = textarea.value.split('\n');
+          var found = false;
+
+          // 如果第一行是 header，則從第二行開始比對
+          if (allLines.length && allLines[0].toLowerCase().includes('lon') && allLines[0].toLowerCase().includes('lat')) {
+            for (var i = 1; i < allLines.length; i++) {
+              if (!found && allLines[i].trim() === marker.lineContent) {
+                allLines.splice(i, 1);
+                found = true;
+                break;
+              }
+            }
+          } else {
+            for (var i = 0; i < allLines.length; i++) {
+              if (!found && allLines[i].trim() === marker.lineContent) {
+                allLines.splice(i, 1);
+                found = true;
+                break;
+              }
+            }
+          }
+          // 將更新後的文字回寫到 textarea
+          textarea.value = allLines.join('\n');
+        });
+
+        marker.addTo(markerLayer);
+        markers.push(marker);
+      });
+
+      // 若有標記則調整地圖顯示範圍
+      if (markers.length > 0) {
+        var group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.2));
+      } else {
+        alert("資料中找不到有效的經緯度點！");
+      }
+    }
+
+    // 按下「標記經緯度點」按鈕後執行 marker 標記
+    document.getElementById('plotBtn').addEventListener('click', function() {
+      plotMarkers();
+    });
+  </script>
+</body>
+</html>
