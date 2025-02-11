@@ -66,16 +66,16 @@
 
     // --- 色階函式 ---
     function getCFColor(risk) {
-      if (risk <= 0.5) return 'rgba(128,128,128,0.6)';
-      let t = (risk - 0.5) / 0.5;  // t 從 0 到 1
+      if (risk <= 0) return 'rgba(128,128,128,0.6)';
+      let t = risk;  // t 從 0 到 1
       let r = Math.round(128 * (1 - t) + 0 * t);
       let g = Math.round(128 * (1 - t) + 0 * t);
       let b = Math.round(128 * (1 - t) + 180 * t);
       return `rgba(${r},${g},${b},0.6)`;
     }
     function getCGColor(risk) {
-      if (risk <= 0.5) return 'rgba(128,128,128,0.4)';
-      let t = (risk - 0.5) / 0.5;
+      if (risk <= 0) return 'rgba(128,128,128,0.4)';
+      let t = risk; // t 從 0 到 1
       let r = Math.round(128 * (1 - t) + 180 * t);
       let g = Math.round(128 * (1 - t) + 0 * t);
       let b = Math.round(128 * (1 - t) + 0 * t);
@@ -155,8 +155,8 @@
           let rec = records.find(r => r.features.latitude === lat && r.features.longitude === lon);
           if (rec) {
             labels.push(dateStr);
-            cfRisks.push(rec.ensemble.cf);
-            cgRisks.push(rec.ensemble.cg);
+            cfRisks.push(rec.ensemble.cf<0.5 ? 0 : (rec.ensemble.cf-0.5)*2);
+            cgRisks.push(rec.ensemble.cg<0.5 ? 0 : (rec.ensemble.cg-0.5)*2);
           }
         }
       });
@@ -220,8 +220,8 @@
       data.forEach(record => {
         const lon = record.features.longitude;
         const lat = record.features.latitude;
-        const cfRisk = record.ensemble.cf;
-        const cgRisk = record.ensemble.cg;
+        const cfRisk = record.ensemble.cf<0.5 ? 0 : (record.ensemble.cf-0.5)*2;
+        const cgRisk = record.ensemble.cg<0.5 ? 0 : (record.ensemble.cg-0.5)*2;
         const bounds = createCellPolygon(lon, lat);
         const polyCF = L.polygon(bounds, {
           color: getCFColor(cfRisk),
@@ -253,7 +253,7 @@
                                 <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
                                 <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
                                 <b>CG Risk:</b> ${cgRisk.toFixed(2)}<br>
-                                <canvas id="${chartId}" width="300" height="200"></canvas>
+                                <canvas id="${chartId}" width="500" height="400"></canvas>
                               </div>`;
           L.popup()
             .setLatLng(e.latlng)
