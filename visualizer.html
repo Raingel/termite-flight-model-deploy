@@ -197,11 +197,15 @@
           title: { display: true, text: 'Risk Variation Over Time' },
           scales: {
             x: {
-              ticks: { autoSkip: true, maxTicksLimit: 10 }
+              ticks: { autoSkip: true, maxTicksLimit: 25 },
+              font: { size: 14 }
             },
             y: {
               beginAtZero: true,
-              suggestedMax: 1
+              suggestedMax: 1,
+              ticks: { 
+                font: { size: 14 },
+              }
             }
           }
         }
@@ -246,20 +250,32 @@
           interactive: true
         });
         clickPoly.on('click', function(e) {
-          // 產生一個唯一的 canvas id，方便在 popup 中使用 Chart.js
+          // 產生一個唯一的 canvas id
           let chartId = `chart_${lat}_${lon}`;
-          let popupContent = `<div>
-                                <b>Date:</b> ${ds}<br>
-                                <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
-                                <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
-                                <b>CG Risk:</b> ${cgRisk.toFixed(2)}<br>
-                                <canvas id="${chartId}" width="500" height="400"></canvas>
-                              </div>`;
-          L.popup()
+          // 使用相對單位來設定 popup 內容的尺寸（例如 80vw x 60vh）
+          let popupContent = `
+            <div style="width:80vw; height:60vh; overflow:auto;">
+              <b>Date:</b> ${ds}<br>
+              <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
+              <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
+              <b>CG Risk:</b> ${cgRisk.toFixed(2)}<br>
+              <canvas id="${chartId}" style="width:100%; height:70%;"></canvas>
+            </div>`;
+          
+          // 設定 popup 選項，最大尺寸以螢幕寬高的百分比來設定
+          let popupOptions = {
+            maxWidth: window.innerWidth * 0.8,
+            maxHeight: window.innerHeight * 0.5,
+            autoPan: true,
+            closeButton: true
+          };
+
+          L.popup(popupOptions)
             .setLatLng(e.latlng)
             .setContent(popupContent)
             .openOn(map);
-          // 略微延遲後繪製圖表，確保 popup 已完成渲染
+
+          // 略微延遲後繪製圖表，確保 popup 已渲染完成
           setTimeout(function() { drawRiskChart(lat, lon, chartId); }, 150);
         });
         clickLayer.addLayer(clickPoly);
