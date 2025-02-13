@@ -24,4 +24,4 @@ jobs:
 
       - name: Update Weather Data
         run: |
-          python weather_forecast.py update --forecast_days 16
+          python 2_predict.py update --forecast_days 16
