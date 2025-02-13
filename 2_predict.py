@@ -239,7 +239,7 @@ def update_weather_data(forecast_days=16):
 # =============================================================================
 def update_historical_weather_data(target_year, forecast_days=0):
     """
-    下載指定年度（例如 2024 年）的歷史氣象資料，不結合預報，
+    下載指定年度（例如 2024 年）的歷史氣象資料，不結合預報資料，
     並存成 CSV 檔到 ./weather_data_historical/{target_year}/。
     若檔案在過去 24 小時內已更新，則跳過下載。
     """
@@ -256,7 +256,6 @@ def update_historical_weather_data(target_year, forecast_days=0):
         file_path = os.path.join(output_dir, file_name)
         if os.path.exists(file_path):
             mod_time = os.path.getmtime(file_path)
-            # 這裡假設 24 小時內更新為最新
             if time.time() - mod_time < 24 * 3600:
                 logging.info(f"[{target_year}] 檔案 {file_name} 在 24 小時內已更新，跳過下載。")
                 continue
@@ -362,19 +361,17 @@ def run_forecast_from_weather_data(input_folder="./weather_data_tmp"):
                 if model_name not in model_weight:
                     logging.error(f"模型 {model_name} 未指定權重，將跳過此模型。")
                     continue
-                try {
+                try:
                     proba = model.predict_proba(X)[:, 1][0]
                     individual_preds[model_name] = round(proba, 3)
-                    if (model_name.startsWith("cf_")) {
+                    if model_name.startswith("cf_"):
                         cf_preds.append(proba)
                         ensemble_cf += proba * model_weight[model_name]
-                    } else if (model_name.startsWith("cg_")) {
+                    elif model_name.startswith("cg_"):
                         cg_preds.append(proba)
                         ensemble_cg += proba * model_weight[model_name]
-                    }
-                } catch (e) {
+                except Exception as e:
                     logging.error(f"模型 {model_name} 在 {row['date']} 預測失敗：{e}")
-                }
             ensemble_cf = float(np.mean(cf_preds)) if cf_preds else None
             ensemble_cg = float(np.mean(cg_preds)) if cg_preds else None
             interaction_score = ensemble_cf * ensemble_cg if (ensemble_cf and ensemble_cf >= 0.5 and ensemble_cg and ensemble_cg >= 0.5) else 0.0
