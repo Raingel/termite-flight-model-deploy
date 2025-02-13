@@ -218,21 +218,29 @@ def update_weather_data(forecast_days=16):
         lon = row["lon"]
         lat = row["lat"]
         file_name = f"lat_{lat}_lon_{lon}.csv"
+        meta_file_name = f"lat_{lat}_lon_{lon}.meta"
         file_path = os.path.join(output_dir, file_name)
-        if os.path.exists(file_path):
-            mod_time = os.path.getmtime(file_path)
-            if time.time() - mod_time < 24 * 3600:
-                logging.info(f"檔案 {file_name} 在 24 小時內已更新，跳過下載。")
+        meta_path = os.path.join(output_dir, meta_file_name)
+        # 檢查是否存在 meta 檔，並判斷下載時間是否在 24 小時內
+        if os.path.exists(meta_path):
+            with open(meta_path, "r") as f:
+                last_update = float(f.read().strip())
+            if time.time() - last_update < 24 * 3600:
+                logging.info(f"檔案 {file_name} 在 24 小時內已更新 (meta file)，跳過下載。")
                 continue
         try:
             logging.info(f"下載網格點：lat={lat}, lon={lon}")
             df = download_weather_data_for_grid(lat, lon, forecast_days=forecast_days)
             df.to_csv(file_path, index=False)
+            # 寫入 meta 檔案，記錄下載完成的時間
+            with open(meta_path, "w") as f:
+                f.write(str(time.time()))
             logging.info(f"儲存網格點資料 {file_name} 至 {file_path}")
             logging.info("等待 5 秒鐘...")
             time.sleep(5)
         except Exception as e:
             logging.error(f"下載網格點 lat={lat}, lon={lon} 失敗：{e}")
+
 
 # =============================================================================
 # 新增功能：更新指定歷史年度的氣象資料（僅歷史，不結合預報）
