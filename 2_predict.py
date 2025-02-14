@@ -47,8 +47,9 @@ def batch_fetch_historical(latitudes, longitudes, start_date, end_date, batch_si
         responses = client.weather_api(HIST_URL, params=params)
         results.extend(responses)
         #等待60秒
-        time.sleep(60)
+        
         logging.info(f"等待60秒")
+        time.sleep(60)
     return results
 
 # =============================================================================
@@ -82,8 +83,9 @@ def batch_fetch_forecast(latitudes, longitudes, forecast_days, batch_size=10):
         responses = client.weather_api("https://api.open-meteo.com/v1/forecast", params=params)
         results.extend(responses)
         #等待60秒
-        time.sleep(60)
+        
         logging.info(f"等待60秒")
+        time.sleep(60)
     return results
 
 # =============================================================================
@@ -152,6 +154,8 @@ def merge_weather_data(hist_df, fc_df, current_year, forecast_days):
     # 將 start_date 與 end_date 轉換成 UTC 時區，與合併後的日期一致
     start_date = pd.Timestamp(f"{current_year}-01-01").tz_localize('UTC')
     end_date = (exec_date + pd.Timedelta(days=forecast_days)).tz_localize('UTC')
+    # 在merge前要先把hist_df中有NaN的row通通刪掉
+    hist_df.dropna(inplace=True)
     combined_df = pd.concat([hist_df, fc_df], ignore_index=True)
     combined_df.drop_duplicates(subset="date", keep="first", inplace=True)
     # 比較時兩邊都是 tz-aware
@@ -361,7 +365,9 @@ def run_forecast_from_weather_data(input_folder="./weather_data_tmp"):
         except Exception as e:
             logging.error(f"解析檔名 {base} 失敗：{e}")
             continue
-        
+        # 把latitude, longitude放進去
+        df["latitude"] = lat_val
+        df["longitude"] = lon_val
         for idx, row in df.iterrows():
             feature_dict = {k: row[k] for k in expected_daily_keys if k in row}
             for k in expected_cum_keys:
