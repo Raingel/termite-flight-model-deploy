@@ -25,3 +25,11 @@ jobs:
       - name: Update Forecast Data
         run: |
           python 2_predict.py forecast
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update forecast data [skip ci] $(date)"
+          git push
