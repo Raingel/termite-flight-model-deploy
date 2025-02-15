@@ -1,0 +1,27 @@
+name: Update Forecast Data
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # 每天 UTC 6 點執行
+  workflow_dispatch:     # 允許手動觸發
+
+jobs:
+  update-forecast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy openmeteo_requests retry_requests requests_cache
+
+      - name: Update Forecast Data
+        run: |
+          python 2_predict.py forecast
