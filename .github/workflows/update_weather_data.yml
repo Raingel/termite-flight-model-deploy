@@ -24,4 +24,5 @@ jobs:
 
       - name: Update Weather Data
         run: |
-          python 2_predict.py update --forecast_days 16
+          # 執行 update 模式，並可指定預報天數與批次大小
+          python 2_predict.py update --forecast_days 16 --batch_size 90
