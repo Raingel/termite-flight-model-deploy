@@ -194,13 +194,13 @@ def update_weather_data(forecast_days=16, batch_size=10):
         if os.path.exists(meta_file):
             with open(meta_file, "r") as f:
                 last_update = float(f.read().strip())
-            if time.time() - last_update < 24 * 3600:
-                logging.info(f"{file_name} 在 24 小時內已更新，跳過。")
+            if time.time() - last_update < 20 * 3600:
+                logging.info(f"{file_name} 在 20 小時內已更新，跳過。")
                 continue
         points_to_update.append((lat, lon))
         meta_files[(lat, lon)] = meta_file
     if not points_to_update:
-        logging.info("所有網格點皆在 24 小時內更新，無需下載。")
+        logging.info("所有網格點皆在 20 小時內更新，無需下載。")
         return
     
     lats, lons = zip(*points_to_update)
