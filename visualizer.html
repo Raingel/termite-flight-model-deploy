@@ -35,8 +35,8 @@
   <div id="map"></div>
   <div id="controls">
     <div>
-      <label><input type="checkbox" id="cfCheckbox" checked> CF Risk</label>
-      <label><input type="checkbox" id="cgCheckbox" checked> CG Risk</label>
+      <label><input type="checkbox" id="cfCheckbox" checked> Risk of <em>Coptotermes formosanus</em></label> <br />
+      <label><input type="checkbox" id="cgCheckbox" checked> Risk of <em>Coptotermes gestroi</em></label>
     </div>
     <div>
       <input type="range" id="dateSlider" min="0" max="0" value="0">
@@ -129,9 +129,8 @@
       // 設定 slider 範圍
       $('#dateSlider').attr('min', 0);
       $('#dateSlider').attr('max', availableDates.length - 1);
-      let todayStr = today.toISOString().split('T')[0];
-      let defaultIdx = availableDates.indexOf(todayStr);
-      if (defaultIdx === -1) defaultIdx = 0;
+      // 將預設日期改成最新的預報資料（陣列最後一筆）
+      let defaultIdx = availableDates.length - 1;
       $('#dateSlider').val(defaultIdx);
       updateDateDisplay();
       updateLayers();
@@ -155,8 +154,8 @@
           let rec = records.find(r => r.features.latitude === lat && r.features.longitude === lon);
           if (rec) {
             labels.push(dateStr);
-            cfRisks.push(rec.ensemble.cf<0.5 ? 0 : (rec.ensemble.cf-0.5)*2);
-            cgRisks.push(rec.ensemble.cg<0.5 ? 0 : (rec.ensemble.cg-0.5)*2);
+            cfRisks.push(rec.ensemble.cf < 0.5 ? 0 : (rec.ensemble.cf - 0.5) * 2);
+            cgRisks.push(rec.ensemble.cg < 0.5 ? 0 : (rec.ensemble.cg - 0.5) * 2);
           }
         }
       });
@@ -177,14 +176,14 @@
           labels: riskData.labels,
           datasets: [
             {
-              label: 'CF Risk',
+              label: 'Risk of Coptotermes formosanus',
               data: riskData.cfRisks,
               borderColor: 'rgba(0,0,180,0.8)',
               backgroundColor: 'rgba(0,0,180,0.2)',
               fill: false,
             },
             {
-              label: 'CG Risk',
+              label: 'Risk of Coptotermes gestroi',
               data: riskData.cgRisks,
               borderColor: 'rgba(180,0,0,0.8)',
               backgroundColor: 'rgba(180,0,0,0.2)',
@@ -224,8 +223,8 @@
       data.forEach(record => {
         const lon = record.features.longitude;
         const lat = record.features.latitude;
-        const cfRisk = record.ensemble.cf<0.5 ? 0 : (record.ensemble.cf-0.5)*2;
-        const cgRisk = record.ensemble.cg<0.5 ? 0 : (record.ensemble.cg-0.5)*2;
+        const cfRisk = record.ensemble.cf < 0.5 ? 0 : (record.ensemble.cf - 0.5) * 2;
+        const cgRisk = record.ensemble.cg < 0.5 ? 0 : (record.ensemble.cg - 0.5) * 2;
         const bounds = createCellPolygon(lon, lat);
         const polyCF = L.polygon(bounds, {
           color: getCFColor(cfRisk),
@@ -252,19 +251,17 @@
         clickPoly.on('click', function(e) {
           // 產生一個唯一的 canvas id
           let chartId = `chart_${lat}_${lon}`;
-          // 使用相對單位來設定 popup 內容的尺寸（例如 80vw x 60vh）
+          // popup 內容的容器改為 90vw，並設定 id 方便後續操作
           let popupContent = `
-            <div style="width:80vw; height:60vh; overflow:auto;">
-              <b>Date:</b> ${ds}<br>
+            <div id="popupContentContainer" style="width:90vw; height:40vh; overflow:auto;">
+
               <b>Location:</b> (${lat.toFixed(2)}, ${lon.toFixed(2)})<br>
-              <b>CF Risk:</b> ${cfRisk.toFixed(2)}<br>
-              <b>CG Risk:</b> ${cgRisk.toFixed(2)}<br>
-              <canvas id="${chartId}" style="width:100%; height:70%;"></canvas>
+              <canvas id="${chartId}" style="width:100%; height:90%;"></canvas>
             </div>`;
           
           // 設定 popup 選項，最大尺寸以螢幕寬高的百分比來設定
           let popupOptions = {
-            maxWidth: window.innerWidth * 0.8,
+            maxWidth: window.innerWidth * 0.9,
             maxHeight: window.innerHeight * 0.5,
             autoPan: true,
             closeButton: true
@@ -275,8 +272,10 @@
             .setContent(popupContent)
             .openOn(map);
 
-          // 略微延遲後繪製圖表，確保 popup 已渲染完成
-          setTimeout(function() { drawRiskChart(lat, lon, chartId); }, 150);
+          // 略微延遲後繪製圖表
+          setTimeout(function() { 
+            drawRiskChart(lat, lon, chartId); 
+          }, 150);
         });
         clickLayer.addLayer(clickPoly);
       });
