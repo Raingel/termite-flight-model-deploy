@@ -31,9 +31,17 @@
       justify-content: space-around;
       padding: 10px;
     }
-    #controls label {
+    /* 將物種勾選項目用 .species 包裹，利用 flex 讓標籤自動換行 */
+    .species {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .species label {
       font-size: 16px;
-      margin-right: 15px;
+      /* 在桌面版時，每個標籤寬度可依需求調整，這裡給 45% */
+      flex: 1 1 45%;
+      white-space: nowrap;
     }
     #dateDisplay {
       font-weight: bold;
@@ -74,12 +82,41 @@
       color: #555;
       text-align: left;
     }
+    /* 手機版調整 */
+    @media (max-width: 600px) {
+      #popupContentContainer {
+        width: 90vw;
+        height: 70vh;
+        padding: 5px;
+        /* 讓 popup 內容超出時能捲動 */
+        overflow-y: auto;
+      }
+      /* 手機版圖表分配更多高度 */
+      #chartWrapper {
+        flex: 3;
+      }
+      /* 手機版資訊區縮小 */
+      #infoWrapper {
+        flex: 1;
+        margin-top: 5px;
+        font-size: 14px;
+      }
+      /* 手機版物種勾選區，自行調整為直排 */
+      .species {
+        flex-direction: column;
+      }
+      .species label {
+        flex: none;
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="controls">
-    <div>
+    <!-- 物種勾選區 -->
+    <div class="species">
       <label>
         <input type="checkbox" id="cfCheckbox" checked>
         臺灣家白蟻 (Coptotermes formosanus)
@@ -148,7 +185,7 @@
     async function initForecastData() {
       const today = new Date();
       const start = new Date(today);
-      start.setDate(start.getDate() - 365);
+      start.setDate(start.getDate() - 7);
       const end = new Date(today);
       end.setDate(end.getDate() + 16);
       let current = new Date(start);
@@ -350,8 +387,8 @@
               todayRiskText = `
                 <div style="margin-top:10px;">
                   <h4 style="margin: 0; color:#333;">今天的風險 (Today's Risk):</h4>
-                  <p style="margin: 5px 0;">臺灣家白蟻 (Coptotermes formosanus): <strong>${cfRiskToday.toFixed(2)}</strong></p>
-                  <p style="margin: 5px 0;">格斯特家白蟻 (Coptotermes gestroi): <strong>${cgRiskToday.toFixed(2)}</strong></p>
+                  <p style="margin: 5px 0;">臺灣家白蟻: <strong>${cfRiskToday.toFixed(2)}</strong></p>
+                  <p style="margin: 5px 0;">格斯特家白蟻: <strong>${cgRiskToday.toFixed(2)}</strong></p>
                 </div>`;
             }
           }
