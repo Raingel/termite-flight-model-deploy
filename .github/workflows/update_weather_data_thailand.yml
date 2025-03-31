@@ -25,7 +25,7 @@ jobs:
       - name: Update Weather Data
         run: |
           # 執行 update 模式，並可指定預報天數與批次大小
-          python 2_predict_thailand.py update --forecast_days 16 --batch_size 90
+          python 2_predict_thailand.py update_thailand --forecast_days 16 --batch_size 90
       
       - name: Commit and push changes
         run: |
