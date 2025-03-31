@@ -173,7 +173,7 @@ def merge_weather_data(hist_df, fc_df, current_year, forecast_days):
 # 儲存資料至 weather_data_tmp_thailand
 # =============================================================================
 def update_weather_data_thailand(forecast_days=16, batch_size=10):
-    grid_path = "./1_grid_points/taiwan_grid.csv"
+    grid_path = "./1_grid_points/grid_points_thailand.csv"
     output_dir = "./weather_data_tmp_thailand"
     os.makedirs(output_dir, exist_ok=True)
     
