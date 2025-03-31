@@ -1,0 +1,36 @@
+name: Update Weather Data
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  
+  workflow_dispatch:     # 允許手動觸發
+
+jobs:
+  update-weather:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy openmeteo_requests retry_requests requests_cache
+
+      - name: Update Weather Data
+        run: |
+          # 執行 update 模式，並可指定預報天數與批次大小
+          python 2_predict_thailand.py update --forecast_days 16 --batch_size 90
+      
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update weather data [skip ci] $(date)"
+          git push
