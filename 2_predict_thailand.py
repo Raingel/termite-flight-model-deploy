@@ -180,8 +180,8 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
         logging.info(f"批次下載歷史資料：處理第 {batch_start+1} 到 {batch_start+len(batch_points)} 個點")
         try:
             hist_responses = client.weather_api("https://archive-api.open-meteo.com/v1/archive", params=hist_params)
-        except openmeteo_requests.Client.OpenMeteoRequestsError as e:
-            logging.error(f"歷史資料 API 限制錯誤：{e}。立即中斷執行。")
+        except Exception as e:
+            logging.error(f"API 下載錯誤：{e}。立即中斷執行。")
             sys.exit(1)
         logging.info("等待60秒以避免 API 限制")
         time.sleep(60)
@@ -207,8 +207,8 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
         logging.info(f"批次下載預報資料：處理第 {batch_start+1} 到 {batch_start+len(batch_points)} 個點")
         try:
             fc_responses = client.weather_api("https://api.open-meteo.com/v1/forecast", params=fc_params)
-        except openmeteo_requests.Client.OpenMeteoRequestsError as e:
-            logging.error(f"預報資料 API 限制錯誤：{e}。立即中斷執行。")
+        except Exception as e:
+            logging.error(f"API 下載錯誤：{e}。立即中斷執行。")
             sys.exit(1)
         logging.info("等待60秒以避免 API 限制")
         time.sleep(60)
