@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>白蟻分飛風險地圖 (Termite Flight Risk Map)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      background-color: #f7f7f7;
+    }
+    #map {
+      height: 90%;
+    }
+    /* 控制區塊：桌面版原設定 */
+    #controls {
+      height: 10%;
+      background: #ffffff;
+      border-top: 1px solid #ddd;
+      box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 10px;
+    }
+    /* 將物種勾選項目用 .species 包裹，利用 flex 讓標籤自動換行 */
+    .species {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .species label {
+      font-size: 16px;
+      /* 桌面版每個標籤給 45% 寬 */
+      flex: 1 1 45%;
+      white-space: nowrap;
+    }
+    #dateDisplay {
+      font-weight: bold;
+      margin-left: 10px;
+      font-size: 16px;
+    }
+    /* Popup 內容樣式：採用 Flexbox 排版 */
+    #popupContentContainer {
+      display: flex;
+      flex-direction: column;
+      width: 60vw;
+      height: 60vh;
+      padding: 10px;
+      background: #fff;
+      border-radius: 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    /* 圖表區會自動填滿剩餘空間 */
+    #chartWrapper {
+      flex: 1;
+      position: relative;
+    }
+    /* 使 canvas 完全填滿 chartWrapper 並不會超出 */
+    #chartWrapper canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100% !important;
+      height: 100% !important;
+      box-sizing: border-box;
+    }
+    /* 文字資訊區 */
+    #infoWrapper {
+      margin-top: 10px;
+      font-size: 16px;
+      color: #555;
+      text-align: left;
+    }
+    /* 手機版調整 */
+    @media (max-width: 600px) {
+      #map {
+        height: 80%;
+      }
+      /* 控制區塊：改為直排，每個元件佔一行，間距縮小 */
+      #controls {
+        height: 20%;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #controls > div {
+        width: 100%;
+        margin-bottom: 2px;
+      }
+      #controls > div:last-child {
+        margin-bottom: 0;
+      }
+      /* 手機版 slider 設為全寬 */
+      #dateSlider {
+        width: 100%;
+      }
+      /* Popup 調整 */
+      #popupContentContainer {
+        width: 90vw;
+        height: 70vh;
+        padding: 5px;
+        overflow-y: auto;
+      }
+      /* 手機版圖表分配更多高度 */
+      #chartWrapper {
+        flex: 3;
+      }
+      /* 手機版資訊區縮小 */
+      #infoWrapper {
+        flex: 1;
+        margin-top: 5px;
+        font-size: 14px;
+      }
+      /* 手機版物種勾選區改直排 */
+      .species {
+        flex-direction: column;
+      }
+      .species label {
+        flex: none;
+        width: 100%;
+      }
+      /* 手機版日期顯示置中 */
+      #dateDisplay {
+        text-align: center;
+        margin: 0 auto;
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="controls">
+    <!-- 物種勾選區 -->
+    <div class="species">
+      <label>
+        <input type="checkbox" id="cfCheckbox" checked>
+        臺灣家白蟻 (Coptotermes formosanus)
+      </label>
+      <label>
+        <input type="checkbox" id="cgCheckbox" checked>
+        格斯特家白蟻 (Coptotermes gestroi)
+      </label>
+    </div>
+    <div>
+      <input type="range" id="dateSlider" min="0" max="0" value="0">
+      <span id="dateDisplay"></span>
+    </div>
+  </div>
+
+  <!-- 引入 jQuery 與 Leaflet -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    // --- 地圖與全域變數 ---
+    const map = L.map('map').setView([15.5, 100.5], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+    let forecastDataByDate = {};
+    let availableDates = [];
+    const cfLayer = L.layerGroup();
+    const cgLayer = L.layerGroup();
+    const clickLayer = L.layerGroup();
+
+    // --- 色階函式 ---
+    function getCFColor(risk) {
+      if (risk <= 0) return 'rgba(128,128,128,0.6)';
+      let t = risk;
+      let r = Math.round(128 * (1 - t));
+      let g = Math.round(128 * (1 - t));
+      let b = Math.round(128 * (1 - t) + 180 * t);
+      return `rgba(${r},${g},${b},0.6)`;
+    }
+    function getCGColor(risk) {
+      if (risk <= 0) return 'rgba(128,128,128,0.4)';
+      let t = risk;
+      let r = Math.round(128 * (1 - t) + 180 * t);
+      let g = Math.round(128 * (1 - t));
+      let b = Math.round(128 * (1 - t));
+      return `rgba(${r},${g},${b},0.6)`;
+    }
+
+    // --- 產生網格多邊形 (每個網格大小 0.1°) ---
+    function createCellPolygon(lon, lat) {
+      const half = 0.05;
+      return [
+        [lat - half, lon - half],
+        [lat - half, lon + half],
+        [lat + half, lon + half],
+        [lat + half, lon - half]
+      ];
+    }
+
+    // --- 載入單一日期的預報 JSON ---
+    function loadForecast(dateStr) {
+      const url = `https://raw.githubusercontent.com/Raingel/termite-flight-model-deploy/refs/heads/main/2_predictions_thailand/${dateStr}.json`;
+      return $.getJSON(url);
+    }
+
+    // --- 初始化：載入從今天往前 7 天到往後 16 天的預報資料 ---
+    async function initForecastData() {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 7);
+      const end = new Date(today);
+      end.setDate(end.getDate() + 16);
+      let current = new Date(start);
+      const loadPromises = [];
+      while (current <= end) {
+        const ds = current.toISOString().split('T')[0];
+        loadPromises.push(
+          loadForecast(ds)
+            .then(data => {
+              forecastDataByDate[ds] = data;
+              availableDates.push(ds);
+            })
+            .catch(err => {
+              console.warn(`無法載入 ${ds} 的預報資料。`);
+            })
+        );
+        current.setDate(current.getDate() + 1);
+      }
+      await Promise.all(loadPromises);
+      availableDates.sort();
+      $('#dateSlider').attr('min', 0);
+      $('#dateSlider').attr('max', availableDates.length - 1);
+      let defaultIdx = availableDates.length - 1;
+      $('#dateSlider').val(defaultIdx);
+      updateDateDisplay();
+      updateLayers();
+    }
+
+    function updateDateDisplay() {
+      const idx = parseInt($('#dateSlider').val());
+      const ds = availableDates[idx];
+      $('#dateDisplay').text(ds);
+    }
+
+    // --- 收集指定網格點在整個日期區間的風險資料 ---
+    function getRiskTimeSeries(lat, lon) {
+      let labels = [];
+      let cfRisks = [];
+      let cgRisks = [];
+      availableDates.forEach(dateStr => {
+        let records = forecastDataByDate[dateStr];
+        if (records) {
+          let rec = records.find(r => r.features.latitude === lat && r.features.longitude === lon);
+          if (rec) {
+            labels.push(dateStr);
+            cfRisks.push(rec.ensemble.cf < 0.5 ? 0 : (rec.ensemble.cf - 0.5) * 2);
+            cgRisks.push(rec.ensemble.cg < 0.5 ? 0 : (rec.ensemble.cg - 0.5) * 2);
+          }
+        }
+      });
+      return { labels, cfRisks, cgRisks };
+    }
+
+    // --- 利用 Chart.js 畫圖，顯示該網格的風險變化 ---
+    function drawRiskChart(lat, lon, chartId) {
+      const riskData = getRiskTimeSeries(lat, lon);
+      if (riskData.labels.length === 0) {
+        console.warn("找不到該網格的風險資料");
+        return;
+      }
+      const today = new Date();
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(today.getDate() - 7);
+      let filteredLabels = [];
+      let filteredCfRisks = [];
+      let filteredCgRisks = [];
+      for (let i = 0; i < riskData.labels.length; i++) {
+          const date = new Date(riskData.labels[i]);
+          if (date >= oneWeekAgo) {
+              filteredLabels.push(riskData.labels[i]);
+              filteredCfRisks.push(riskData.cfRisks[i]);
+              filteredCgRisks.push(riskData.cgRisks[i]);
+          }
+      }
+      const todayStr = today.toISOString().split('T')[0];
+      const todayIndex = filteredLabels.indexOf(todayStr);
+
+      let verticalLinePlugin = null;
+      if (todayIndex !== -1) {
+          verticalLinePlugin = {
+             id: 'verticalLinePlugin',
+             afterDraw: (chart) => {
+               const ctx = chart.ctx;
+               const xScale = chart.scales.x;
+               const xPos = xScale.getPixelForValue(filteredLabels[todayIndex]);
+               const topY = chart.chartArea.top;
+               const bottomY = chart.chartArea.bottom;
+               ctx.save();
+               ctx.beginPath();
+               ctx.moveTo(xPos, topY);
+               ctx.lineTo(xPos, bottomY);
+               ctx.lineWidth = 2;
+               ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+               ctx.stroke();
+               ctx.fillStyle = 'black';
+               ctx.textAlign = 'center';
+               ctx.fillText("今天 (Today)", xPos, topY + 10);
+               ctx.restore();
+             }
+          };
+      }
+
+      const ctx = document.getElementById(chartId).getContext('2d');
+      const chartConfig = {
+          type: 'line',
+          data: {
+              labels: filteredLabels,
+              datasets: [
+                {
+                  label: '臺灣家白蟻 (Coptotermes formosanus) 風險 (Risk)',
+                  data: filteredCfRisks,
+                  borderColor: 'rgba(0,0,180,0.8)',
+                  backgroundColor: 'rgba(0,0,180,0.2)',
+                  fill: false,
+                },
+                {
+                  label: '格斯特家白蟻 (Coptotermes gestroi) 風險 (Risk)',
+                  data: filteredCgRisks,
+                  borderColor: 'rgba(180,0,0,0.8)',
+                  backgroundColor: 'rgba(180,0,0,0.2)',
+                  fill: false,
+                }
+              ]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                 title: {
+                    display: true,
+                    text: '風險變化趨勢 (Risk Variation Over Time)'
+                 },
+              },
+              scales: {
+                  x: {
+                      ticks: { autoSkip: true, maxTicksLimit: 25 },
+                      font: { size: 14 }
+                  },
+                  y: {
+                      beginAtZero: true,
+                      suggestedMax: 1,
+                      ticks: { font: { size: 14 } }
+                  }
+              }
+          },
+          plugins: verticalLinePlugin ? [verticalLinePlugin] : []
+      };
+
+      new Chart(ctx, chartConfig);
+    }
+
+    // --- 更新圖層：根據選擇日期產生風險圖層與點擊用圖層 ---
+    function updateLayers() {
+      const idx = parseInt($('#dateSlider').val());
+      const ds = availableDates[idx];
+      cfLayer.clearLayers();
+      cgLayer.clearLayers();
+      clickLayer.clearLayers();
+      if (!forecastDataByDate[ds]) return;
+      const data = forecastDataByDate[ds];
+      data.forEach(record => {
+        const lon = record.features.longitude;
+        const lat = record.features.latitude;
+        const cfRisk = record.ensemble.cf < 0.5 ? 0 : (record.ensemble.cf - 0.5) * 2;
+        const cgRisk = record.ensemble.cg < 0.5 ? 0 : (record.ensemble.cg - 0.5) * 2;
+        const bounds = createCellPolygon(lon, lat);
+        const polyCF = L.polygon(bounds, {
+          color: getCFColor(cfRisk),
+          fillColor: getCFColor(cfRisk),
+          fillOpacity: 0.8,
+          weight: 1,
+          interactive: false
+        });
+        const polyCG = L.polygon(bounds, {
+          color: getCGColor(cgRisk),
+          fillColor: getCGColor(cgRisk),
+          fillOpacity: 0.8,
+          weight: 1,
+          interactive: false
+        });
+        cfLayer.addLayer(polyCF);
+        cgLayer.addLayer(polyCG);
+        // 建立一個透明多邊形作為點擊層
+        const clickPoly = L.polygon(bounds, {
+          color: 'transparent',
+          fillOpacity: 0,
+          interactive: true
+        });
+        clickPoly.on('click', function(e) {
+          let chartId = `chart_${lat}_${lon}`;
+          let todayStr = new Date().toISOString().split('T')[0];
+          let todayRiskText = "";
+          if (forecastDataByDate[todayStr]) {
+            let record = forecastDataByDate[todayStr].find(r => r.features.latitude === lat && r.features.longitude === lon);
+            if (record) {
+              let cfRiskToday = record.ensemble.cf < 0.5 ? 0 : (record.ensemble.cf - 0.5) * 2;
+              let cgRiskToday = record.ensemble.cg < 0.5 ? 0 : (record.ensemble.cg - 0.5) * 2;
+              // 調整後的 todayRiskText 排版
+              todayRiskText = `
+                <div style="margin-top:10px;">
+                  <h4 style="margin: 0; color:#333;">今天的風險 (Today's Risk):</h4>
+                  <p style="margin: 5px 0;">臺灣家白蟻: <strong>${cfRiskToday.toFixed(2)}</strong></p>
+                  <p style="margin: 5px 0;">格斯特家白蟻: <strong>${cgRiskToday.toFixed(2)}</strong></p>
+                </div>`;
+            }
+          }
+          // 利用 Flexbox 將圖表與資訊區分隔
+          let popupContent = `
+            <div id="popupContentContainer">
+              <div id="chartWrapper">
+                <canvas id="${chartId}"></canvas>
+              </div>
+              <div id="infoWrapper">
+                <p><strong>位置 (Location):</strong> (${lat.toFixed(2)}, ${lon.toFixed(2)})</p>
+                ${todayRiskText}
+              </div>
+            </div>`;
+          let popupOptions = {
+            maxWidth: window.innerWidth * 0.9,
+            maxHeight: window.innerHeight * 0.6,
+            autoPan: true,
+            closeButton: true
+          };
+
+          L.popup(popupOptions)
+            .setLatLng(e.latlng)
+            .setContent(popupContent)
+            .openOn(map);
+
+          // 稍作延遲再繪製圖表，確保 canvas 已渲染完成
+          setTimeout(function() { 
+            drawRiskChart(lat, lon, chartId); 
+          }, 150);
+        });
+        clickLayer.addLayer(clickPoly);
+      });
+      if ($('#cfCheckbox').is(':checked')) {
+        map.addLayer(cfLayer);
+      } else {
+        map.removeLayer(cfLayer);
+      }
+      if ($('#cgCheckbox').is(':checked')) {
+        map.addLayer(cgLayer);
+      } else {
+        map.removeLayer(cgLayer);
+      }
+      map.addLayer(clickLayer);
+    }
+
+    $(document).ready(function() {
+      map.setView([23.5, 121.0], 7);
+      initForecastData();
+      $('#dateSlider').on('input change', function() {
+        updateDateDisplay();
+        updateLayers();
+      });
+      $('#cfCheckbox, #cgCheckbox').on('change', function() {
+        updateLayers();
+      });
+    });
+  </script>
+</body>
+</html>
