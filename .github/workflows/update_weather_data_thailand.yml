@@ -1,12 +1,12 @@
-name: Update Weather Data Thailand
+name: Update Forecast Data thailand
 
 on:
   schedule:
     - cron: '45 */3 * * *'
-  workflow_dispatch:  # 允許手動觸發
+  workflow_dispatch:     # 允許手動觸發
 
 jobs:
-  update-weather:
+  update-forecast:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -15,22 +15,22 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy openmeteo_requests retry_requests requests_cache
+          pip install pandas numpy>=2 openmeteo_requests retry_requests requests_cache scikit-learn>=1.6
 
-      - name: Update Weather Data
+      - name: Update Forecast Data
         run: |
-          # 執行 update_thailand 模式，並可指定預報天數與批次大小
           python 2_predict_thailand.py update_thailand --forecast_days 16 --batch_size 40
-      
+          python 2_predict_thailand.py forecast_thailand
+
       - name: Commit and push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Update weather data [skip ci] $(date)"
+          git commit -m "Update forecast data [skip ci] $(date)"
           git push
