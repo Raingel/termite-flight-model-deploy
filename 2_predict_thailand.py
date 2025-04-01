@@ -182,7 +182,7 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
             hist_responses = client.weather_api("https://archive-api.open-meteo.com/v1/archive", params=hist_params)
         except Exception as e:
             logging.error(f"API 下載錯誤：{e}。立即中斷執行。")
-            sys.exit(1)
+            sys.exit(0)
         logging.info("等待60秒以避免 API 限制")
         time.sleep(60)
         
@@ -209,7 +209,7 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
             fc_responses = client.weather_api("https://api.open-meteo.com/v1/forecast", params=fc_params)
         except Exception as e:
             logging.error(f"API 下載錯誤：{e}。立即中斷執行。")
-            sys.exit(1)
+            sys.exit(0)
         logging.info("等待60秒以避免 API 限制")
         time.sleep(60)
         
