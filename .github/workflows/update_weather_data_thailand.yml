@@ -2,7 +2,7 @@ name: Update thailand
 
 on:
   schedule:
-    - cron: '45 */3 * * *'
+    - cron: '45 */6 * * *'
   workflow_dispatch:     # 允許手動觸發
 
 jobs:
