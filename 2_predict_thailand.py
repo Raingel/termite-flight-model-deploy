@@ -274,6 +274,7 @@ def run_forecast_from_weather_data_thailand(input_folder="./weather_data_tmp_tha
     weather_files = glob.glob(os.path.join(input_folder, "*.csv"))
     logging.info(f"找到 {len(weather_files)} 個氣象資料檔案於 {input_folder}。")
     all_results = []
+    today = pd.Timestamp.now().normalize()
     for wf in weather_files:
         try:
             df = pd.read_csv(wf)
@@ -291,7 +292,14 @@ def run_forecast_from_weather_data_thailand(input_folder="./weather_data_tmp_tha
             continue
         df["latitude"] = lat_val
         df["longitude"] = lon_val
-        for idx, row in df.iterrows():
+        # 將日期轉換成 datetime 型別
+        df["date"] = pd.to_datetime(df["date"])
+        # 僅保留「未來資料」與過去 21 天的資料（作為預測的上下文）
+        df = df[df["date"] >= (today - pd.Timedelta(days=21))]
+        # 若只希望預測未來資料，則進一步過濾出日期 >= 今日的部分
+        df_forecast = df[df["date"] >= today]
+        
+        for idx, row in df_forecast.iterrows():
             feature_dict = {k: row[k] for k in expected_daily_keys if k in row}
             for k in expected_cum_keys:
                 if k in row:
@@ -327,7 +335,7 @@ def run_forecast_from_weather_data_thailand(input_folder="./weather_data_tmp_tha
             ensemble_cg = float(np.mean(cg_preds)) if cg_preds else None
             interaction_score = ensemble_cf * ensemble_cg if (ensemble_cf and ensemble_cf >= 0.5 and ensemble_cg and ensemble_cg >= 0.5) else 0.0
             result = {
-                "date": row["date"],
+                "date": row["date"].strftime("%Y-%m-%d"),
                 "individual_predictions": individual_preds,
                 "ensemble": {
                     "cf": ensemble_cf,
@@ -341,7 +349,7 @@ def run_forecast_from_weather_data_thailand(input_folder="./weather_data_tmp_tha
     logging.info(f"共預測出 {len(all_results)} 筆結果。")
     forecasts_by_date = {}
     for res in all_results:
-        ds = pd.to_datetime(res["date"]).strftime("%Y-%m-%d")
+        ds = res["date"]
         if ds not in forecasts_by_date:
             forecasts_by_date[ds] = []
         forecasts_by_date[ds].append(res)
@@ -350,9 +358,6 @@ def run_forecast_from_weather_data_thailand(input_folder="./weather_data_tmp_tha
     os.makedirs(output_dir, exist_ok=True)
     for ds, results_list in forecasts_by_date.items():
         out_path = os.path.join(output_dir, f"{ds}.json")
-        for item in results_list:
-            if isinstance(item.get("date"), (pd.Timestamp, datetime)):
-                item["date"] = pd.to_datetime(item["date"]).strftime("%Y-%m-%d")
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(results_list, f, ensure_ascii=False, indent=2)
         logging.info(f"儲存預報結果 {ds} 至 {out_path}")
