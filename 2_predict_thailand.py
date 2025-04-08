@@ -105,7 +105,7 @@ def merge_weather_data(hist_df, fc_df, current_year, forecast_days):
 # =============================================================================
 # 更新泰國網格點的當年氣象資料（歷史＋預報）
 # - 先讀取所有網格點資料（檔案：grid_points_thailand.csv）
-# - 檢查每個點是否在72小時內已更新，若是則跳過
+# - 檢查每個點是否在update_freq小時內已更新，若是則跳過
 # - 將需要更新的網格點依 batch_size 分批處理（例如每批50個）
 # - 對同一批次內的網格點先下載歷史資料，再下載預報資料（若任一 API 呼叫失敗則中斷執行）
 # - 合併該網格點的歷史與預報資料後，存成 CSV 並更新 meta 檔案
@@ -114,7 +114,7 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
     grid_path = "./1_grid_points/grid_points_thailand.csv"
     output_dir = "./weather_data_tmp_thailand"
     os.makedirs(output_dir, exist_ok=True)
-    
+    update_freq = 24
     grid_df = pd.read_csv(grid_path)
     logging.info(f"讀取網格點資料，共 {len(grid_df)} 筆。")
     points_to_update = []
@@ -128,9 +128,9 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
         if os.path.exists(meta_file):
             with open(meta_file, "r") as f:
                 last_update = float(f.read().strip())
-            # 若該點在72小時內已更新，則跳過
-            if time.time() - last_update < 72 * 3600:
-                logging.info(f"{file_name} 在 72 小時內已更新，跳過。")
+            # 若該點在?小時內已更新，則跳過
+            if time.time() - last_update < update_freq * 3600:
+                logging.info(f"{file_name} 在 {update_freq} 小時內已更新，跳過。")
                 continue
         points_to_update.append((lat, lon))
         meta_files[(lat, lon)] = meta_file
@@ -139,7 +139,7 @@ def update_weather_data_thailand(forecast_days=16, batch_size=50):
             logging.info("已達到更新一小時的限制，停止更新。")
             break
     if not points_to_update:
-        logging.info("所有網格點皆在 72 小時內更新，無需下載。")
+        logging.info("所有網格點皆在 {update_freq} 小時內更新，無需下載。")
         return
 
     # 設定日期參數（以當年資料為例）
