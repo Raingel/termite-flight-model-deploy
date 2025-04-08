@@ -274,7 +274,7 @@ def run_forecast_from_weather_data_thailand(input_folder="./weather_data_tmp_tha
     weather_files = glob.glob(os.path.join(input_folder, "*.csv"))
     logging.info(f"找到 {len(weather_files)} 個氣象資料檔案於 {input_folder}。")
     all_results = []
-    today = pd.Timestamp.now().normalize()
+    today = pd.Timestamp.now(tz='Asia/Taipei').normalize()
     for wf in weather_files:
         try:
             df = pd.read_csv(wf)
