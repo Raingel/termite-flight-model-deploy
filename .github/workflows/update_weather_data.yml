@@ -2,15 +2,18 @@ name: Update Weather Data
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 0 點執行
-  workflow_dispatch:     # 允許手動觸發
+    - cron: '0 */8 * * *'   # 每 8 小時執行一次（UTC）
+  workflow_dispatch:
 
 jobs:
   update-weather:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history, keep creds)
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0              # 抓完整歷史，才能 pull/rebase
+          persist-credentials: true   # 保留 GITHUB_TOKEN，讓後續可以推送
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -24,13 +27,16 @@ jobs:
 
       - name: Update Weather Data
         run: |
-          # 執行 update 模式，並可指定預報天數與批次大小
           python 2_predict.py update --forecast_days 16 --batch_size 90
-      
-      - name: Commit and push changes
+
+      - name: Sync with remote (rebase)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
+      - name: Commit and push changes
+        run: |
           git add .
-          git commit -m "Update weather data [skip ci] $(date)"
-          git push
+          git diff --cached --quiet || git commit -m "Update weather data [skip ci] $(date)"
+          git push origin main
