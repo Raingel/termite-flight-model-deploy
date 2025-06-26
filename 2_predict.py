@@ -341,7 +341,13 @@ def run_forecast_from_weather_data(input_folder="./weather_data_tmp"):
     for wf in weather_files:
         try:
             df = pd.read_csv(wf)
-            logging.info(f"讀取 {wf}，共 {len(df)} 筆。")
+            logging.info(f"讀取 {wf}，原始 {len(df)} 筆。")
+            # 丢掉任何一列有 NaN 的 row
+            df = df.dropna()
+            logging.info(f"去除含缺值的 row 後剩下 {len(df)} 筆。")
+            if df.empty:
+                logging.info(f"{wf} 全部是缺值，跳過預報。")
+                continue
         except Exception as e:
             logging.error(f"讀取 {wf} 失敗：{e}")
             continue
