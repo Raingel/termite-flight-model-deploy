@@ -2,23 +2,24 @@ name: Update Weather Data
 
 on:
   schedule:
-    - cron: '0 */8 * * *'   # 每 8 小時執行一次（UTC）
-  workflow_dispatch:
+    - cron: '0 */8 * * *'      # 每 8 小時執行一次（UTC 時間）
+  workflow_dispatch:           # 允許手動觸發
 
 jobs:
   update-weather:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository (full history, keep creds)
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0              # 抓完整歷史，才能 pull/rebase
-          persist-credentials: true   # 保留 GITHUB_TOKEN，讓後續可以推送
+          fetch-depth: 0              # 取完整的 commit 歷史，讓後續 pull/rebase 有足夠依據
+          persist-credentials: true   # 保留自動注入的 GITHUB_TOKEN，方便後續 git push
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.8'       # 指定 Python 版本
 
       - name: Install dependencies
         run: |
@@ -27,16 +28,25 @@ jobs:
 
       - name: Update Weather Data
         run: |
+          # 執行你的更新腳本，參數可依需求調整
           python 2_predict.py update --forecast_days 16 --batch_size 90
 
-      - name: Sync with remote (rebase)
+      - name: Sync with remote (rebase with autostash)
         run: |
+          # 設定後續 commit 的作者名稱
           git config user.name "github-actions[bot]"
+          # 設定後續 commit 的作者信箱
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 開啟 rebase.autoStash，讓 git pull --rebase 前自動 stash 本地變更
+          git config --global rebase.autoStash true
+          # 以 rebase 方式拉取遠端 main 分支，stash 會在 rebase 完成後自動還原
           git pull --rebase origin main
 
       - name: Commit and push changes
         run: |
+          # 暫存所有檔案變更
           git add .
+          # 如果有 staged 變更才 commit，commit 訊息加上 [skip ci] 可以避免再次觸發 CI
           git diff --cached --quiet || git commit -m "Update weather data [skip ci] $(date)"
+          # 推送到遠端 main 分支
           git push origin main
